@@ -1,0 +1,10 @@
+build/
+devel/
+install/
+log/
+*.bag
+*.gz
+*.db
+_pycache_/
+*.so
+
