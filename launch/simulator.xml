@@ -119,8 +119,9 @@
         <param name="color/b" value="0.0"/>       
         <param name="covariance_scale" value="100.0"/>       
         <param name="robot_scale" value="1.0"/>
-        <param name="tf45" value="true"/>
+        <param name="tf45" value="false"/>
   </node>
+  
 
   <node pkg="local_sensing_node" type="pcl_render_node" name="pcl_render_node" output="screen">
         <rosparam command="load" file="$(find local_sensing_node)/params/camera.yaml" />
