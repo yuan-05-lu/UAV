@@ -16,6 +16,9 @@ class PosCmdBridge:
         self.hold_y = 0.0
         self.hold_z = 1.5
         self.hold_yaw = 0.0
+        self.hold_vx = 0.0
+        self.hold_vy = 0.0
+        self.hold_vz = 0.0
         self.timeout = 1.0
         self.rate = rospy.Rate(100)   # 与 traj_server 同频
 
@@ -26,6 +29,9 @@ class PosCmdBridge:
         self.hold_y = msg.position.y
         self.hold_z = msg.position.z
         self.hold_yaw = msg.yaw
+        self.hold_vx = msg.velocity.x
+        self.hold_vy = msg.velocity.y
+        self.hold_vz = msg.velocity.z
 
     def run(self):
         while not rospy.is_shutdown():
@@ -34,13 +40,14 @@ class PosCmdBridge:
             sp.header.stamp = rospy.Time.now()
             # PositionTarget无FRAME_LOCAL_ENU常量；FRAME_LOCAL_NED标记非机体系，MAVROS自动将输入ENU转为NED下发PX4
             sp.coordinate_frame = PositionTarget.FRAME_LOCAL_NED
-            sp.type_mask = (PositionTarget.IGNORE_VX | PositionTarget.IGNORE_VY |
-                            PositionTarget.IGNORE_VZ | PositionTarget.IGNORE_AFX |
-                            PositionTarget.IGNORE_AFY | PositionTarget.IGNORE_AFZ |
-                            PositionTarget.IGNORE_YAW_RATE)
+            sp.type_mask = (PositionTarget.IGNORE_AFX | PositionTarget.IGNORE_AFY |
+                            PositionTarget.IGNORE_AFZ | PositionTarget.IGNORE_YAW_RATE)
             sp.position.x = self.hold_x
             sp.position.y = self.hold_y
             sp.position.z = self.hold_z
+            sp.velocity.x = self.hold_vx
+            sp.velocity.y = self.hold_vy
+            sp.velocity.z = self.hold_vz
             sp.yaw = self.hold_yaw
 
             if now - self.last_cmd_time > self.timeout:
