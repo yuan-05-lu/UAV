@@ -38,12 +38,12 @@
 
   <!-- main node -->
   <node pkg="ego_planner" name="ego_planner_node" type="ego_planner_node" output="screen">
-    <!-- <remap from="/odom_world" to="$(arg odometry_topic)"/>
+    <remap from="/odom_world" to="$(arg odometry_topic)"/>
     <remap from="/grid_map/odom" to="$(arg odometry_topic)"/>
-    -->
     <remap from="/grid_map/cloud" to="$(arg cloud_topic)"/>
-    <remap from = "/grid_map/pose"   to = "$(arg camera_pose_topic)"/> 
-    <remap from = "/grid_map/depth" to = "$(arg depth_topic)"/>
+    <!-- LiDAR-only SITL: no depth camera / pcl_render -->
+    <!-- <remap from="/grid_map/pose" to="$(arg camera_pose_topic)"/> -->
+    <!-- <remap from="/grid_map/depth" to="$(arg depth_topic)"/> -->
 
     <!-- planning fsm -->
     <param name="fsm/flight_type" value="$(arg flight_type)" type="int"/>
@@ -77,7 +77,7 @@
     <param name="grid_map/local_update_range_x"  value="5.5" /> 
     <param name="grid_map/local_update_range_y"  value="5.5" /> 
     <param name="grid_map/local_update_range_z"  value="4.5" /> 
-    <param name="grid_map/obstacles_inflation"     value="0.099" /> 
+    <param name="grid_map/obstacles_inflation"     value="0.25" /> 
     <param name="grid_map/local_map_margin" value="30"/>
     <param name="grid_map/ground_height"        value="-0.01"/>
     <!-- camera parameter -->
@@ -86,7 +86,7 @@
     <param name="grid_map/fx" value="$(arg fx)"/>
     <param name="grid_map/fy" value="$(arg fy)"/>
     <!-- depth filter -->
-    <param name="grid_map/use_depth_filter" value="true"/>
+    <param name="grid_map/use_depth_filter" value="false"/>
     <param name="grid_map/depth_filter_tolerance" value="0.15"/>
     <param name="grid_map/depth_filter_maxdist"   value="5.0"/>
     <param name="grid_map/depth_filter_mindist"   value="0.2"/>

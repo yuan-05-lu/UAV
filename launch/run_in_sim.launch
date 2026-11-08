@@ -10,9 +10,6 @@
   
   <arg name="odom_topic" value="/mavros/odom_convert" />
   <arg name="odometry_topic" value="$(arg odom_topic)"/>
-  <node pkg="topic_tools" name="odom_relay" type="relay" args="/mavros/odom_convert /odom_world" output="screen"/>
-  <node pkg="topic_tools" name="grid_odom_relay" type="relay" args="/mavros/odom_convert /grid_map/odom" output="screen"/>
-
   <!-- main algorithm params -->
   <include file="$(find ego_planner)/launch/advanced_param.xml">
     
@@ -24,8 +21,8 @@
     <!-- camera pose: transform of camera frame in the world frame -->
     <!-- depth topic: depth image, 640x480 by default -->
     <!-- don't set cloud_topic if you already set these ones! -->
-    <arg name="camera_pose_topic" value="/pcl_render_node/camera_pose"/>
-    <arg name="depth_topic" value="/pcl_render_node/depth"/>
+    <arg name="camera_pose_topic" value=""/>
+    <arg name="depth_topic" value=""/>
 
     <!-- topic of point cloud measurement, such as from LIDAR  -->
     <!-- don't set camera pose and depth, if you already set this one! -->
@@ -96,7 +93,8 @@
     <param name="waypoint_type" value="manual-lonely-waypoint"/>    
   </node>
 
-  <!-- use simulator -->
+  <!-- Gazebo SITL: do not start SO3 simulator / mockamap / pcl_render -->
+  <!--
   <include file="$(find ego_planner)/launch/simulator.xml">
     <arg name="map_size_x_" value="$(arg map_size_x)"/>
     <arg name="map_size_y_" value="$(arg map_size_y)"/>
@@ -104,8 +102,8 @@
     <arg name="c_num" value="200"/>
     <arg name="p_num" value="200"/>
     <arg name="min_dist" value="1.2"/>
-
     <arg name="odometry_topic" value="$(arg odom_topic)" />
   </include>
+  -->
 
 </launch>
