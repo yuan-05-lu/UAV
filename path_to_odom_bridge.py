@@ -49,6 +49,8 @@ class PathToOdomBridge(object):
         self.publish_tf = rospy.get_param("~publish_tf", True)
         self.publish_static_world = rospy.get_param("~publish_static_world", True)
         self.force_identity_yaw = rospy.get_param("~force_identity_yaw", True)
+        # rosbag 回放：用当前 sim time，别用 Path 里 2020 年的 stamp（防 TF_OLD_DATA / loop 回跳）
+        self.use_bag_stamp = rospy.get_param("~use_bag_stamp", False)
 
         self._latest = None
         self._path_frame = self.odom_frame
@@ -120,7 +122,10 @@ class PathToOdomBridge(object):
         return _quat_identity()
 
     def _publish_odom(self, ps):
-        stamp = ps.header.stamp if ps.header.stamp.to_sec() > 0 else rospy.Time.now()
+        if self.use_bag_stamp and ps.header.stamp.to_sec() > 0:
+            stamp = ps.header.stamp
+        else:
+            stamp = rospy.Time.now()
         ori = self._orientation_for_pose(ps)
         odom = Odometry()
         odom.header.stamp = stamp
@@ -153,8 +158,11 @@ class PathToOdomBridge(object):
     def _tf_timer(self, _evt):
         if not self.publish_tf or self._last_tf is None:
             return
-        pos, ori = self._last_tf
-        self._send_base_tf(rospy.Time.now(), pos, ori)
+        try:
+            pos, ori = self._last_tf
+            self._send_base_tf(rospy.Time.now(), pos, ori)
+        except rospy.exceptions.ROSTimeMovedBackwardsException:
+            pass
 
 
 if __name__ == "__main__":

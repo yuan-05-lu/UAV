@@ -24,8 +24,10 @@ class PointsToWorld(object):
         self.cloud_in = rospy.get_param("~cloud_in", "/os1_cloud_node1/points")
         self.cloud_out = rospy.get_param("~cloud_out", "/ego/points_world")
         self.target_frame = rospy.get_param("~target_frame", "world")
+        # rosbag -l 会时间回跳，必须用最新 TF，不要用点云旧 stamp
+        self.use_latest_tf = rospy.get_param("~use_latest_tf", True)
 
-        self._tf_buffer = tf2_ros.Buffer(cache_time=rospy.Duration(30.0))
+        self._tf_buffer = tf2_ros.Buffer(cache_time=rospy.Duration(60.0))
         self._tf_listener = tf2_ros.TransformListener(self._tf_buffer)
         self._pub = rospy.Publisher(self.cloud_out, PointCloud2, queue_size=2)
         self._seen_frame = False
@@ -38,14 +40,20 @@ class PointsToWorld(object):
         )
 
     def _lookup(self, src, stamp):
-        for t in (stamp, rospy.Time(0)):
+        times = (rospy.Time(0),) if self.use_latest_tf else (stamp, rospy.Time(0))
+        last_err = None
+        for t in times:
             try:
                 return self._tf_buffer.lookup_transform(
-                    self.target_frame, src, t, rospy.Duration(0.2)
+                    self.target_frame, src, t, rospy.Duration(0.5)
                 )
-            except tf2_ros.ExtrapolationException:
+            except (
+                tf2_ros.ExtrapolationException,
+                tf2_ros.LookupException,
+            ) as err:
+                last_err = err
                 continue
-        raise tf2_ros.LookupException(
+        raise last_err or tf2_ros.LookupException(
             "no transform %s -> %s" % (src, self.target_frame)
         )
 
@@ -63,6 +71,11 @@ class PointsToWorld(object):
         stamp = msg.header.stamp if msg.header.stamp.to_sec() > 0 else rospy.Time(0)
         try:
             trans = self._lookup(src, stamp)
+        except rospy.exceptions.ROSTimeMovedBackwardsException:
+            rospy.logwarn_throttle(
+                5.0, "sim time jumped (rosbag loop); skip one cloud frame"
+            )
+            return
         except (
             tf2_ros.LookupException,
             tf2_ros.ConnectivityException,
