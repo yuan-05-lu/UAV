@@ -10,7 +10,7 @@
   python path_to_odom_bridge.py _path_topic:=/node_pos_sc _odom_topic:=/mavros/odom_convert
 
 若点云 frame_id 为雷达系，另启 static TF（示例）：
-  rosrun tf2_ros static_transform_publisher 0 0 0 0 0 0 base_link os1_cloud_node1 100
+  rosrun tf2_ros static_transform_publisher 0 0 0 0 0 0 base_link sensor1/os_sensor 100
 """
 import math
 
@@ -55,6 +55,8 @@ class PathToOdomBridge(object):
         self._prev_x = None
         self._prev_y = None
         self._warned_bad_quat = False
+        self._last_tf = None
+        self._tf_rate = rospy.get_param("~tf_republish_hz", 30.0)
 
         self._odom_pub = rospy.Publisher(self.odom_topic, Odometry, queue_size=5)
         self._tf_br = tf2_ros.TransformBroadcaster()
@@ -62,6 +64,10 @@ class PathToOdomBridge(object):
             self._send_static_world_map()
 
         rospy.Subscriber(self.path_topic, Path, self._path_cb, queue_size=5)
+        if self.publish_tf and self._tf_rate > 0:
+            rospy.Timer(
+                rospy.Duration(1.0 / self._tf_rate), self._tf_timer, oneshot=False
+            )
         rospy.loginfo(
             "path_to_odom: %s -> %s (child=%s parent=%s)",
             self.path_topic,
@@ -72,16 +78,16 @@ class PathToOdomBridge(object):
 
     def _send_static_world_map(self):
         static_br = tf2_ros.StaticTransformBroadcaster()
-        now = rospy.Time.now()
         msgs = []
         for parent, child in ((self.world_frame, "map"), ("map", self.odom_frame)):
             t = TransformStamped()
-            t.header.stamp = now
+            t.header.stamp = rospy.Time(0)
             t.header.frame_id = parent
             t.child_frame_id = child
             t.transform.rotation.w = 1.0
             msgs.append(t)
         static_br.sendTransform(msgs)
+        rospy.loginfo("Static TF latched: %s -> map -> %s", self.world_frame, self.odom_frame)
 
     def _path_cb(self, msg):
         if not msg.poses:
@@ -127,21 +133,28 @@ class PathToOdomBridge(object):
         odom.twist.twist.linear.z = 0.0
         self._odom_pub.publish(odom)
 
-        if not self.publish_tf:
-            self._prev_x = ps.pose.position.x
-            self._prev_y = ps.pose.position.y
-            return
+        self._last_tf = (ps.pose.position, ori)
+        self._prev_x = ps.pose.position.x
+        self._prev_y = ps.pose.position.y
+        if self.publish_tf:
+            self._send_base_tf(stamp, ps.pose.position, ori)
+
+    def _send_base_tf(self, stamp, position, ori):
         tf = TransformStamped()
         tf.header.stamp = stamp
         tf.header.frame_id = self.odom_frame
         tf.child_frame_id = self.base_frame
-        tf.transform.translation.x = ps.pose.position.x
-        tf.transform.translation.y = ps.pose.position.y
-        tf.transform.translation.z = ps.pose.position.z
+        tf.transform.translation.x = position.x
+        tf.transform.translation.y = position.y
+        tf.transform.translation.z = position.z
         tf.transform.rotation = ori
         self._tf_br.sendTransform(tf)
-        self._prev_x = ps.pose.position.x
-        self._prev_y = ps.pose.position.y
+
+    def _tf_timer(self, _evt):
+        if not self.publish_tf or self._last_tf is None:
+            return
+        pos, ori = self._last_tf
+        self._send_base_tf(rospy.Time.now(), pos, ori)
 
 
 if __name__ == "__main__":

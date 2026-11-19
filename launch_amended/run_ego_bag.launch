@@ -67,11 +67,15 @@
     <param name="traj_opt/yaw_tracking" value="false"/>
   </node>
 
-  <!-- 省内存可整段注释；要看飞机模型再打开 -->
-  <!--
+  <!-- bag 回放：显示机体位置与已走路径（无 Gazebo 模型） -->
   <node pkg="odom_visualization" name="odom_visualization" type="odom_visualization" output="screen">
     <remap from="~odom" to="$(arg odom_topic)"/>
     <param name="frame_id" value="world"/>
+    <param name="robot_scale" value="2.0"/>
+    <param name="color/r" value="0.2"/>
+    <param name="color/g" value="0.8"/>
+    <param name="color/b" value="0.2"/>
+    <param name="color/a" value="1.0"/>
+    <!-- 不指定 mesh 则用默认几何体，避免本机 iris.stl 路径不存在 -->
   </node>
-  -->
 </launch>
