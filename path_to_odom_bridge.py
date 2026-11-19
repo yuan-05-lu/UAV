@@ -48,6 +48,7 @@ class PathToOdomBridge(object):
         self.world_frame = rospy.get_param("~world_frame", "world")
         self.publish_tf = rospy.get_param("~publish_tf", True)
         self.publish_static_world = rospy.get_param("~publish_static_world", True)
+        self.force_identity_yaw = rospy.get_param("~force_identity_yaw", True)
 
         self._latest = None
         self._path_frame = self.odom_frame
@@ -94,6 +95,8 @@ class PathToOdomBridge(object):
         self._publish_odom(ps)
 
     def _orientation_for_pose(self, ps):
+        if self.force_identity_yaw:
+            return _quat_identity()
         q = ps.pose.orientation
         if _quat_valid(q):
             return q
