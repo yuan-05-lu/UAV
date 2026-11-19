@@ -12,10 +12,30 @@
 若点云 frame_id 为雷达系，另启 static TF（示例）：
   rosrun tf2_ros static_transform_publisher 0 0 0 0 0 0 base_link os1_cloud_node1 100
 """
+import math
+
 import rospy
 from nav_msgs.msg import Path, Odometry
-from geometry_msgs.msg import TransformStamped, PoseStamped
+from geometry_msgs.msg import TransformStamped, PoseStamped, Quaternion
 import tf2_ros
+
+
+def _quat_valid(q):
+    n2 = q.x * q.x + q.y * q.y + q.z * q.z + q.w * q.w
+    return n2 > 1e-8
+
+
+def _quat_identity():
+    q = Quaternion()
+    q.w = 1.0
+    return q
+
+
+def _quat_yaw(yaw):
+    q = Quaternion()
+    q.z = math.sin(yaw * 0.5)
+    q.w = math.cos(yaw * 0.5)
+    return q
 
 
 class PathToOdomBridge(object):
@@ -31,6 +51,9 @@ class PathToOdomBridge(object):
 
         self._latest = None
         self._path_frame = self.odom_frame
+        self._prev_x = None
+        self._prev_y = None
+        self._warned_bad_quat = False
 
         self._odom_pub = rospy.Publisher(self.odom_topic, Odometry, queue_size=5)
         self._tf_br = tf2_ros.TransformBroadcaster()
@@ -70,19 +93,40 @@ class PathToOdomBridge(object):
         self._latest = ps
         self._publish_odom(ps)
 
+    def _orientation_for_pose(self, ps):
+        q = ps.pose.orientation
+        if _quat_valid(q):
+            return q
+        if not self._warned_bad_quat:
+            rospy.logwarn(
+                "Path pose has invalid quaternion (0,0,0,0); "
+                "use yaw from motion or identity w=1"
+            )
+            self._warned_bad_quat = True
+        x, y = ps.pose.position.x, ps.pose.position.y
+        if self._prev_x is not None:
+            dx, dy = x - self._prev_x, y - self._prev_y
+            if dx * dx + dy * dy > 1e-8:
+                return _quat_yaw(math.atan2(dy, dx))
+        return _quat_identity()
+
     def _publish_odom(self, ps):
         stamp = ps.header.stamp if ps.header.stamp.to_sec() > 0 else rospy.Time.now()
+        ori = self._orientation_for_pose(ps)
         odom = Odometry()
         odom.header.stamp = stamp
         odom.header.frame_id = self.odom_frame
         odom.child_frame_id = self.base_frame
-        odom.pose.pose = ps.pose
+        odom.pose.pose.position = ps.pose.position
+        odom.pose.pose.orientation = ori
         odom.twist.twist.linear.x = 0.0
         odom.twist.twist.linear.y = 0.0
         odom.twist.twist.linear.z = 0.0
         self._odom_pub.publish(odom)
 
         if not self.publish_tf:
+            self._prev_x = ps.pose.position.x
+            self._prev_y = ps.pose.position.y
             return
         tf = TransformStamped()
         tf.header.stamp = stamp
@@ -91,8 +135,10 @@ class PathToOdomBridge(object):
         tf.transform.translation.x = ps.pose.position.x
         tf.transform.translation.y = ps.pose.position.y
         tf.transform.translation.z = ps.pose.position.z
-        tf.transform.rotation = ps.pose.orientation
+        tf.transform.rotation = ori
         self._tf_br.sendTransform(tf)
+        self._prev_x = ps.pose.position.x
+        self._prev_y = ps.pose.position.y
 
 
 if __name__ == "__main__":
