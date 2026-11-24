@@ -54,6 +54,27 @@ rosparam set use_sim_time false
 - Marker：`/ego_planner_node/optimal_list`
 - 障碍物：`/grid_map/occupancy_inflate`
 
+## 常见问题
+
+### 固定点云有了，但栅格不跟着“规划路径”走
+
+EGO 的 `grid_map` **不是**把整幅 PCD 一次性灌满；它在 **当前 odom 附近** 用射线更新局部体素。  
+**规划路径**只是最优解，**不会移动 odom** 时，远处体素可能一直是空的。
+
+**处理：** 用 `ego_map_warmup.py` 在 PCD 包络内网格走一圈再落回起点；或在线模式让 Path 持续更新 odom。  
+评指标仍以 **`occupancy_inflate` 是否覆盖规划走廊** 为准，不要期望栅格随红线移动（静态图模式下栅格应一次铺满）。
+
+### 规划线在点云“下面”、`final_plan_success=0`
+
+1. **Z 不对齐**：拼接外参 / `--world-z-offset` 与 `static_odom` 的 `z`、`goal` 的 `z` 统一（与 Path 一致）。  
+2. **栅格未铺满**：路径下方在规划器里是“自由空间”。先 warmup。  
+3. **`ground_height` / `virtual_ceil_height`**：见 `advanced_param_static_map.xml`。
+
+### `last_progress_time_ ERROR` / `first_optimize_step_success=0`
+
+多为 **优化失败**（碰撞、不可行、地图空）。确认 `use_sim_time` 与当前模式一致（离线应用 `false`）。  
+不要混用仍在播的 bag 时钟与 `static_odom`。
+
 ## 评价语义
 
 - **真 odom（评指标）**：`static_odom_publisher` 或录制 Path 的起点。

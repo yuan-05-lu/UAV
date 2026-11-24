@@ -143,6 +143,8 @@ def stitch(args):
         raise RuntimeError("no cloud points read from %s" % args.cloud_topic)
 
     all_pts = np.vstack(chunks)
+    if args.world_z_offset:
+        all_pts[:, 2] += args.world_z_offset
     all_pts = _voxel_downsample(all_pts, args.voxel)
     _write_pcd_ascii(args.out, all_pts)
     print("wrote %s  points=%d  scans=%d" % (args.out, len(all_pts), count))
@@ -162,6 +164,12 @@ def main():
     p.add_argument("--sensor-roll", type=float, default=0.0)
     p.add_argument("--sensor-pitch", type=float, default=0.0)
     p.add_argument("--sensor-yaw", type=float, default=0.0)
+    p.add_argument(
+        "--world-z-offset",
+        type=float,
+        default=0.0,
+        help="add to all stitched z (align Path height with cloud)",
+    )
     args = p.parse_args()
     stitch(args)
 
