@@ -7,7 +7,8 @@
   <arg name="map_size_z" default="4.0"/>
   <arg name="local_update_range" default="45.0"/>
   <arg name="odom_topic" default="/mavros/odom_convert"/>
-  <arg name="cloud_topic" default="/ego/points_world"/>
+  <!-- 体素障碍点云（由 obstacle_grid_from_pcd.py 发布） -->
+  <arg name="cloud_topic" default="/ego/obstacle_voxels"/>
 
   <arg name="uav_repo" default="$(env UAV_REPO)"/>
   <include file="$(arg uav_repo)/launch_amended/advanced_param_static_map.xml">

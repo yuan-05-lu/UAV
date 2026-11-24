@@ -25,6 +25,21 @@ python bag_stitch_pcd.py \
 
 外参与在线 `static_transform_publisher` 一致。
 
+### B1.5 障碍物点云 → 障碍栅格（推荐）
+
+```bash
+python obstacle_grid_from_pcd.py _pcd_file:=/path/sbs_01_global.pcd \
+  _resolution:=0.5 _inflation:=0.1 _slice_z:=1.2
+```
+
+| 话题 | 含义 |
+|------|------|
+| `/ego/obstacle_voxels` | 体素中心点云 → 接 EGO `cloud_topic` |
+| `/map/projected_occupancy` | 某一高度层 2D 栅格 → RViz **Map** 全景 |
+| `/map/obstacle_voxel_cloud` | 同体素点云，便于对照点云 |
+
+EGO launch 默认 `cloud_topic=/ego/obstacle_voxels`。RViz 同时加 **Map**（`/map/projected_occupancy`）与 **`/grid_map/occupancy_inflate`**，前者为离线投影全景，后者为规划器内部融合结果。
+
 ### B2 跑规划与指标（不播 rosbag）
 
 ```bash
@@ -38,7 +53,7 @@ rosparam set use_sim_time false
 |------|------|
 | 1 | `roscore` |
 | 2 | `python pcd_map_publisher.py _pcd_file:=/path/sbs_01_global.pcd` |
-| 3 | `python static_odom_publisher.py _x:=... _y:=... _z:=1.2` |
+| 3 | `python ego_map_warmup.py _pcd_file:=... _finish_x:=... _finish_y:=... _finish_z:=...`（代替一直停在起点的 static_odom） |
 | 4 | `rosrun tf2_ros static_transform_publisher 0 0 0.2 0 0 0 base_link sensor1/os_sensor 100` |
 | 5 | `roslaunch $UAV_REPO/launch_amended/run_ego_offline_eval.launch` |
 | 6 | `python offline_plan_eval.py _config:=$UAV_REPO/config/eval_tasks_sbs01.yaml` |
