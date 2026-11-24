@@ -38,6 +38,7 @@
   <arg name="point5_z"/>
 
   <arg name="flight_type"/>
+  <arg name="local_update_range_" default="40"/>
 
   <node pkg="ego_planner" name="ego_planner_node" type="ego_planner_node" output="screen">
     <remap from="/odom_world" to="$(arg odometry_topic)"/>
@@ -76,9 +77,9 @@
     <param name="grid_map/map_size_x" value="$(arg map_size_x_)"/>
     <param name="grid_map/map_size_y" value="$(arg map_size_y_)"/>
     <param name="grid_map/map_size_z" value="$(arg map_size_z_)"/>
-    <param name="grid_map/local_update_range_x" value="25"/>
-    <param name="grid_map/local_update_range_y" value="25"/>
-    <param name="grid_map/local_update_range_z" value="5"/>
+    <param name="grid_map/local_update_range_x" value="$(arg local_update_range_)"/>
+    <param name="grid_map/local_update_range_y" value="$(arg local_update_range_)"/>
+    <param name="grid_map/local_update_range_z" value="6"/>
     <param name="grid_map/obstacles_inflation" value="0.1"/>
     <param name="grid_map/local_map_margin" value="40"/>
     <param name="grid_map/ground_height" value="-0.01"/>

@@ -134,7 +134,12 @@ class EgoMapWarmup(object):
             while rospy.Time.now() < t_end and not rospy.is_shutdown():
                 self._send(x, y, z, self.finish_yaw)
                 r.sleep()
-        rospy.loginfo("warmup done — keep publishing finish pose; start static_odom or eval")
+        rospy.logwarn(
+            "warmup done @ finish pose. NOTE: EGO map scrolls with odom — "
+            "cells fused far away may clear when returning here; "
+            "prefer large local_update_range + suggest_map_params.py"
+        )
+        rospy.loginfo("keep publishing finish pose for planning")
         rospy.Timer(
             rospy.Duration(1.0 / self.rate_hz),
             lambda e: self._send(

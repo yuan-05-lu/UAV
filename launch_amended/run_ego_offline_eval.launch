@@ -2,14 +2,16 @@
   <!-- 离线评指标：不播 rosbag、不循环；配合 static_odom + pcd_map_publisher -->
   <param name="use_sim_time" value="false"/>
 
-  <arg name="map_size_x" default="50.0"/>
-  <arg name="map_size_y" default="50.0"/>
-  <arg name="map_size_z" default="3.0"/>
+  <arg name="map_size_x" default="80.0"/>
+  <arg name="map_size_y" default="80.0"/>
+  <arg name="map_size_z" default="4.0"/>
+  <arg name="local_update_range" default="45.0"/>
   <arg name="odom_topic" default="/mavros/odom_convert"/>
   <arg name="cloud_topic" default="/ego/points_world"/>
 
   <arg name="uav_repo" default="$(env UAV_REPO)"/>
   <include file="$(arg uav_repo)/launch_amended/advanced_param_static_map.xml">
+    <arg name="local_update_range_" value="$(arg local_update_range)"/>
     <arg name="map_size_x_" value="$(arg map_size_x)"/>
     <arg name="map_size_y_" value="$(arg map_size_y)"/>
     <arg name="map_size_z_" value="$(arg map_size_z)"/>
