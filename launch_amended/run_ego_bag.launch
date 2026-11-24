@@ -67,7 +67,8 @@
     <param name="traj_opt/yaw_tracking" value="false"/>
   </node>
 
-  <!-- 录制位姿（绿）：path_to_odom_bridge；规划演示（洋红）另开 python poscmd_to_viz_odom.py + viz_planner_odom.launch -->
+  <!-- 阶段二离线评指标见 BAG_EGO_RUNBOOK.md：bag_stitch_pcd + run_ego_offline_eval（不循环播包） -->
+  <!-- 录制位姿（绿）：path_to_odom_bridge；规划演示（洋红）python poscmd_to_viz_odom.py -->
   <!-- bag 回放：显示机体位置与已走路径（无 Gazebo 模型） -->
   <node pkg="odom_visualization" name="odom_visualization" type="odom_visualization" output="screen">
     <remap from="~odom" to="$(arg odom_topic)"/>

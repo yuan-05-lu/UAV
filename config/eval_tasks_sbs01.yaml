@@ -1,0 +1,12 @@
+# 评指标任务表：起点由 static_odom_publisher 发布；每任务改起点请重启该节点或扩 scripted eval。
+scene: sbs_01
+frame_id: world
+goal_eps_m: 0.8
+
+tasks:
+  - id: T1
+    goal: {x: 5.0, y: 3.0, z: 1.2, yaw: 0.0}
+  - id: T2
+    goal: {x: -2.0, y: 4.0, z: 1.2, yaw: 0.0}
+  - id: T3
+    goal: {x: 1.0, y: -3.0, z: 1.2, yaw: 0.0}

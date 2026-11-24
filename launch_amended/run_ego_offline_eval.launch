@@ -1,0 +1,62 @@
+<launch>
+  <!-- 离线评指标：不播 rosbag、不循环；配合 static_odom + pcd_map_publisher -->
+  <param name="use_sim_time" value="false"/>
+
+  <arg name="map_size_x" default="50.0"/>
+  <arg name="map_size_y" default="50.0"/>
+  <arg name="map_size_z" default="3.0"/>
+  <arg name="odom_topic" default="/mavros/odom_convert"/>
+  <arg name="cloud_topic" default="/ego/points_world"/>
+
+  <arg name="uav_repo" default="$(env UAV_REPO)"/>
+  <include file="$(arg uav_repo)/launch_amended/advanced_param_static_map.xml">
+    <arg name="map_size_x_" value="$(arg map_size_x)"/>
+    <arg name="map_size_y_" value="$(arg map_size_y)"/>
+    <arg name="map_size_z_" value="$(arg map_size_z)"/>
+    <arg name="odometry_topic" value="$(arg odom_topic)"/>
+    <arg name="camera_pose_topic" value="/pcl_render_node/camera_pose"/>
+    <arg name="depth_topic" value="/pcl_render_node/depth"/>
+    <arg name="cloud_topic" value="$(arg cloud_topic)"/>
+    <arg name="cx" value="321.04638671875"/>
+    <arg name="cy" value="243.44969177246094"/>
+    <arg name="fx" value="387.229248046875"/>
+    <arg name="fy" value="387.229248046875"/>
+    <arg name="max_vel" value="0.7"/>
+    <arg name="max_acc" value="0.5"/>
+    <arg name="planning_horizon" value="12"/>
+    <arg name="flight_type" value="1"/>
+    <arg name="point_num" value="1"/>
+    <arg name="point0_x" value="0.0"/>
+    <arg name="point0_y" value="0.0"/>
+    <arg name="point0_z" value="1.0"/>
+    <arg name="point1_x" value="0.0"/>
+    <arg name="point1_y" value="0.0"/>
+    <arg name="point1_z" value="1.0"/>
+    <arg name="point2_x" value="0.0"/>
+    <arg name="point2_y" value="0.0"/>
+    <arg name="point2_z" value="1.0"/>
+    <arg name="point3_x" value="0.0"/>
+    <arg name="point3_y" value="0.0"/>
+    <arg name="point3_z" value="1.0"/>
+    <arg name="point4_x" value="0.0"/>
+    <arg name="point4_y" value="0.0"/>
+    <arg name="point4_z" value="1.0"/>
+    <arg name="point5_x" value="0.0"/>
+    <arg name="point5_y" value="0.0"/>
+    <arg name="point5_z" value="1.0"/>
+  </include>
+
+  <node pkg="waypoint_generator" name="waypoint_generator" type="waypoint_generator" output="screen">
+    <remap from="~odom" to="$(arg odom_topic)"/>
+    <remap from="~goal" to="/move_base_simple/goal"/>
+    <remap from="~traj_start_trigger" to="/traj_start_trigger"/>
+    <param name="waypoint_type" value="manual-lonely-waypoint"/>
+  </node>
+
+  <node pkg="ego_planner" name="traj_server" type="traj_server" output="screen">
+    <remap from="/position_cmd" to="/planning/pos_cmd"/>
+    <remap from="/odom_world" to="$(arg odom_topic)"/>
+    <param name="traj_server/time_forward" value="1.5" type="double"/>
+    <param name="traj_opt/yaw_tracking" value="false"/>
+  </node>
+</launch>
