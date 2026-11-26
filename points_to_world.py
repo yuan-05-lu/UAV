@@ -61,7 +61,9 @@ class PointsToWorld(object):
         ox, oy = self._odom_xy
         r2 = self.clear_radius_xy * self.clear_radius_xy
         kept = []
-        for x, y, z in pc2.read_points(cloud, skip_nans=True):
+        for x, y, z in pc2.read_points(
+            cloud, field_names=("x", "y", "z"), skip_nans=True
+        ):
             dx, dy = x - ox, y - oy
             if dx * dx + dy * dy < r2:
                 continue
