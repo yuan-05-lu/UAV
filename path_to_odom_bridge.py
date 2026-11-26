@@ -51,6 +51,7 @@ class PathToOdomBridge(object):
         self.force_identity_yaw = rospy.get_param("~force_identity_yaw", True)
         # rosbag 回放：用当前 sim time，别用 Path 里 2020 年的 stamp（防 TF_OLD_DATA / loop 回跳）
         self.use_bag_stamp = rospy.get_param("~use_bag_stamp", False)
+        self.path_z_offset = rospy.get_param("~path_z_offset", 0.0)
 
         self._latest = None
         self._path_frame = self.odom_frame
@@ -132,6 +133,7 @@ class PathToOdomBridge(object):
         odom.header.frame_id = self.odom_frame
         odom.child_frame_id = self.base_frame
         odom.pose.pose.position = ps.pose.position
+        odom.pose.pose.position.z += self.path_z_offset
         odom.pose.pose.orientation = ori
         odom.twist.twist.linear.x = 0.0
         odom.twist.twist.linear.y = 0.0

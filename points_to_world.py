@@ -34,6 +34,7 @@ class PointsToWorld(object):
         self.use_latest_tf = rospy.get_param("~use_latest_tf", True)
         self.odom_topic = rospy.get_param("~odom_topic", "/mavros/odom_convert")
         self.clear_radius_xy = rospy.get_param("~clear_radius_xy", 1.8)
+        self.cloud_z_offset = rospy.get_param("~cloud_z_offset", 0.0)
         self._odom_xy = None
 
         self._tf_buffer = tf2_ros.Buffer(cache_time=rospy.Duration(60.0))
@@ -67,6 +68,8 @@ class PointsToWorld(object):
             dx, dy = x - ox, y - oy
             if dx * dx + dy * dy < r2:
                 continue
+            if self.cloud_z_offset:
+                z = z + self.cloud_z_offset
             kept.append((x, y, z))
         if not kept:
             return None
