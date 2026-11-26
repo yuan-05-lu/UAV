@@ -10,12 +10,18 @@ sbs_01 点云 frame 多为 sensor1/os_sensor（不是 os1_cloud_node1），例�
 
 用法：
   python points_to_world.py \
-    _cloud_in:=/os1_cloud_node1/points _cloud_out:=/ego/points_world
+    _cloud_in:=/os1_cloud_node1/points _cloud_out:=/ego/points_world \
+    _clear_radius_xy:=1.8
+  # clear_radius_xy：去掉机体水平半径内点云，缓解 LiDAR 同心环陷障（与 min_ray 互补）
 """
 import rospy
+import sensor_msgs.point_cloud2 as pc2
 import tf2_ros
 import tf2_sensor_msgs
+from nav_msgs.msg import Odometry
 from sensor_msgs.msg import PointCloud2
+from sensor_msgs.msg import PointField
+from std_msgs.msg import Header
 
 
 class PointsToWorld(object):
@@ -26,18 +32,49 @@ class PointsToWorld(object):
         self.target_frame = rospy.get_param("~target_frame", "world")
         # rosbag -l 会时间回跳，必须用最新 TF，不要用点云旧 stamp
         self.use_latest_tf = rospy.get_param("~use_latest_tf", True)
+        self.odom_topic = rospy.get_param("~odom_topic", "/mavros/odom_convert")
+        self.clear_radius_xy = rospy.get_param("~clear_radius_xy", 1.8)
+        self._odom_xy = None
 
         self._tf_buffer = tf2_ros.Buffer(cache_time=rospy.Duration(60.0))
         self._tf_listener = tf2_ros.TransformListener(self._tf_buffer)
         self._pub = rospy.Publisher(self.cloud_out, PointCloud2, queue_size=2)
         self._seen_frame = False
         rospy.Subscriber(self.cloud_in, PointCloud2, self._cb, queue_size=2)
+        if self.clear_radius_xy > 0:
+            rospy.Subscriber(self.odom_topic, Odometry, self._odom_cb, queue_size=5)
         rospy.loginfo(
-            "points_to_world: %s -> %s (%s)",
+            "points_to_world: %s -> %s (%s) clear_radius_xy=%.2f",
             self.cloud_in,
             self.cloud_out,
             self.target_frame,
+            self.clear_radius_xy,
         )
+
+    def _odom_cb(self, msg):
+        p = msg.pose.pose.position
+        self._odom_xy = (p.x, p.y)
+
+    def _filter_near_body(self, cloud):
+        if self.clear_radius_xy <= 0 or self._odom_xy is None:
+            return cloud
+        ox, oy = self._odom_xy
+        r2 = self.clear_radius_xy * self.clear_radius_xy
+        kept = []
+        for x, y, z in pc2.read_points(cloud, skip_nans=True):
+            dx, dy = x - ox, y - oy
+            if dx * dx + dy * dy < r2:
+                continue
+            kept.append((x, y, z))
+        if not kept:
+            return None
+        fields = [
+            PointField("x", 0, PointField.FLOAT32, 1),
+            PointField("y", 4, PointField.FLOAT32, 1),
+            PointField("z", 8, PointField.FLOAT32, 1),
+        ]
+        header = Header(frame_id=self.target_frame, stamp=cloud.header.stamp)
+        return pc2.create_cloud(header, fields, kept)
 
     def _lookup(self, src, stamp):
         times = (rospy.Time(0),) if self.use_latest_tf else (stamp, rospy.Time(0))
@@ -95,7 +132,9 @@ class PointsToWorld(object):
         try:
             out = tf2_sensor_msgs.do_transform_cloud(msg, trans)
             out.header.frame_id = self.target_frame
-            self._pub.publish(out)
+            out = self._filter_near_body(out)
+            if out is not None:
+                self._pub.publish(out)
         except Exception as e:
             rospy.logwarn_throttle(2.0, "transform cloud: %s", e)
 
