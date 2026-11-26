@@ -56,30 +56,42 @@ class PointsToWorld(object):
         p = msg.pose.pose.position
         self._odom_xy = (p.x, p.y)
 
-    def _filter_near_body(self, cloud):
-        if self.clear_radius_xy <= 0 or self._odom_xy is None:
-            return cloud
-        ox, oy = self._odom_xy
-        r2 = self.clear_radius_xy * self.clear_radius_xy
-        kept = []
-        for x, y, z in pc2.read_points(
-            cloud, field_names=("x", "y", "z"), skip_nans=True
-        ):
-            dx, dy = x - ox, y - oy
-            if dx * dx + dy * dy < r2:
-                continue
-            if self.cloud_z_offset:
-                z = z + self.cloud_z_offset
-            kept.append((x, y, z))
-        if not kept:
-            return None
+    def _rebuild_cloud(self, cloud, points_iter):
         fields = [
             PointField("x", 0, PointField.FLOAT32, 1),
             PointField("y", 4, PointField.FLOAT32, 1),
             PointField("z", 8, PointField.FLOAT32, 1),
         ]
         header = Header(frame_id=self.target_frame, stamp=cloud.header.stamp)
-        return pc2.create_cloud(header, fields, kept)
+        pts = list(points_iter)
+        if not pts:
+            return None
+        return pc2.create_cloud(header, fields, pts)
+
+    def _iter_points(self, cloud):
+        zoff = self.cloud_z_offset
+        for x, y, z in pc2.read_points(
+            cloud, field_names=("x", "y", "z"), skip_nans=True
+        ):
+            if zoff:
+                z = z + zoff
+            yield (x, y, z)
+
+    def _filter_near_body(self, cloud):
+        if self.clear_radius_xy <= 0 or self._odom_xy is None:
+            if self.cloud_z_offset != 0.0:
+                return self._rebuild_cloud(cloud, self._iter_points(cloud))
+            return cloud
+        ox, oy = self._odom_xy
+        r2 = self.clear_radius_xy * self.clear_radius_xy
+
+        def kept():
+            for x, y, z in self._iter_points(cloud):
+                dx, dy = x - ox, y - oy
+                if dx * dx + dy * dy >= r2:
+                    yield (x, y, z)
+
+        return self._rebuild_cloud(cloud, kept())
 
     def _lookup(self, src, stamp):
         times = (rospy.Time(0),) if self.use_latest_tf else (stamp, rospy.Time(0))
