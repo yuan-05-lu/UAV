@@ -124,22 +124,22 @@ RViz 里「到了」= **规划演示轨迹** 画到目标附近，**不是** 录
 
 **做法：**
 
-### 阶段二 rosbag：航点任务 + 指标（推荐两套脚本）
+### 阶段二 rosbag：航点任务 + 指标
 
-| 脚本 | 作用 |
-|------|------|
-| `waypoint_mission_bag.py` | 读 `config/waypoints_*_bag.yaml`，依次发 Nav Goal，并 latch **最终航点** 到 `/waypoint_mission/final_goal` |
-| `ego_plan_metrics.py` | 记录规划耗时、重规划次数、路径长度、最小障碍距离、到达结果（终端 summary + CSV） |
+**推荐：launch 写航点，`flight_type=1`，不起 waypoint_generator**
+
+1. `launch_amended/run_ego_bag_scripted.launch`：改 `point_num`、`point0_*`…`pointN_*`
+2. `waypoint_mission_bag.py`：默认读 `/ego_planner_node/fsm/waypoint*`，逐个发 `/move_base_simple/goal`
+3. `ego_plan_metrics.py`：采指标；终点以 `/waypoint_mission/final_goal` 为准
 
 ```bash
-# 终端 A：EGO + bag + 桥接 + poscmd_to_viz_odom 已起
+roslaunch … run_ego_bag_scripted.launch   # 无 waypoint_generator
 python ego_plan_metrics.py _csv_path:=/tmp/run.csv _odom_topic:=/viz/odom
-# 终端 B
-python waypoint_mission_bag.py _config:=config/waypoints_sbs01_bag.yaml
-# 任务结束 Ctrl+C 终端 A 打印 EGO metrics summary
+python waypoint_mission_bag.py            # 无需 yaml
 ```
 
-航点坐标请在 YAML 里按场景改；`odom_topic` 与 yaml / `_odom_topic` 一致。旧版 `ego_metrics_logger.py` 仍可用，逻辑与 `ego_plan_metrics.py` 相近。
+若 EGO 收不到 goal，在 `ego_planner_node` 上增加  
+`<remap from="/goal" to="/move_base_simple/goal"/>`（视你 fork 订阅名而定）。
 - **评「规划有没有画到 goal」**（对照 RViz）：加 `_arrival_mode:=plan_end`。
 - **仍用旧脚本**：到达判定改用 **`plan_end`** 或订阅 **`/viz/odom`** 仅作演示说明，**不要**在实验报告里写成真机到达。
 - **评「真机/录制是否到达」**：只有 odom 真跟着飞（或 Path 本身终点就是 goal）时，才用 **recorded odom** 判定。

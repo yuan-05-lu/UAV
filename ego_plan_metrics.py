@@ -116,9 +116,9 @@ class EgoPlanMetrics(object):
         if self.mission_goal_set:
             return
         try:
-            if int(rospy.get_param(self.fsm_ns + "/flight_type", 1)) != 2:
-                return
             n = int(rospy.get_param(self.fsm_ns + "/waypoint_num", 0))
+            if n < 1:
+                return
             i = n - 1
             x = float(rospy.get_param(self.fsm_ns + "/waypoint%d_x" % i))
             y = float(rospy.get_param(self.fsm_ns + "/waypoint%d_y" % i))
