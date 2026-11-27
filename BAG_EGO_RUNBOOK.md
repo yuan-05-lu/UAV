@@ -109,6 +109,25 @@ EGO 的 `grid_map` **不是**把整幅 PCD 一次性灌满；它在 **当前 odo
 - **规划演示**：`poscmd_to_viz_odom`（模式 A 可选）。
 - **相机**：仅模式 A 播 bag 时有用；模式 B 不参与规划与指标。
 
+### RViz「到了」但脚本报 `Arrival FAIL`（horiz err 很大）
+
+**不必换脚本逻辑也能理解；旧脚本默认语义在 bag 模式下会误杀。**
+
+| RViz 里你在看什么 | 代表什么 |
+|------------------|----------|
+| 紫球 + 红/绿线（`/viz/executed_path`） | `poscmd_to_viz_odom` 跟着 **规划指令** 走的**假机体** |
+| 绿 odom / `/node_pos_sc` | **bag 录制真轨迹**（`path_to_odom_bridge`） |
+
+旧指标脚本里的 **Actual path length (odom)** 与 **到达判定** 几乎总是用 **`/mavros/odom_convert`**（录制 Path）。  
+播 bag 时录像往往 **只走了零点几米**（你图里 **0.52 m**），相对 goal 仍差 **14.71 m** → **FAIL**。  
+RViz 里「到了」= **规划演示轨迹** 画到目标附近，**不是** 录制 odom 真飞到了。
+
+**做法：**
+
+- **评「规划有没有画到 goal」**（bag 调试推荐）：`ego_bag_plan_metrics.py` 设 `_arrival_mode:=plan_end`（比 optimal_list 末点）。
+- **仍用旧脚本**：到达判定改用 **`plan_end`** 或订阅 **`/viz/odom`** 仅作演示说明，**不要**在实验报告里写成真机到达。
+- **评「真机/录制是否到达」**：只有 odom 真跟着飞（或 Path 本身终点就是 goal）时，才用 **recorded odom** 判定。
+
 ## 与阶段二条目对应
 
 | 要求 | 本仓库实现 |
