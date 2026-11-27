@@ -124,10 +124,22 @@ RViz 里「到了」= **规划演示轨迹** 画到目标附近，**不是** 录
 
 **做法：**
 
-- **与 Gazebo 同款指标**：`python ego_metrics_logger.py`（`ego_bag_plan_metrics.py` 为同名入口）。
-  - **航点模式** `flight_type:=2`：自动读 `ego_planner_node/fsm/waypoint*`，**最后一航点**为 Goal，无需 `_goal_x/y/z`。
-  - **Nav Goal** `flight_type:=1`：默认 `auto_goal_from_topic` 订阅 `/move_base_simple/goal`。
-  - 演示轨迹与到达一致：开 `poscmd_to_viz_odom` 时 `_odom_topic:=/viz/odom`；评录制轨迹保持默认 `/mavros/odom_convert`。
+### 阶段二 rosbag：航点任务 + 指标（推荐两套脚本）
+
+| 脚本 | 作用 |
+|------|------|
+| `waypoint_mission_bag.py` | 读 `config/waypoints_*_bag.yaml`，依次发 Nav Goal，并 latch **最终航点** 到 `/waypoint_mission/final_goal` |
+| `ego_plan_metrics.py` | 记录规划耗时、重规划次数、路径长度、最小障碍距离、到达结果（终端 summary + CSV） |
+
+```bash
+# 终端 A：EGO + bag + 桥接 + poscmd_to_viz_odom 已起
+python ego_plan_metrics.py _csv_path:=/tmp/run.csv _odom_topic:=/viz/odom
+# 终端 B
+python waypoint_mission_bag.py _config:=config/waypoints_sbs01_bag.yaml
+# 任务结束 Ctrl+C 终端 A 打印 EGO metrics summary
+```
+
+航点坐标请在 YAML 里按场景改；`odom_topic` 与 yaml / `_odom_topic` 一致。旧版 `ego_metrics_logger.py` 仍可用，逻辑与 `ego_plan_metrics.py` 相近。
 - **评「规划有没有画到 goal」**（对照 RViz）：加 `_arrival_mode:=plan_end`。
 - **仍用旧脚本**：到达判定改用 **`plan_end`** 或订阅 **`/viz/odom`** 仅作演示说明，**不要**在实验报告里写成真机到达。
 - **评「真机/录制是否到达」**：只有 odom 真跟着飞（或 Path 本身终点就是 goal）时，才用 **recorded odom** 判定。

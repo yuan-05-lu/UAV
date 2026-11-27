@@ -1,0 +1,11 @@
+# 播 bag + EGO 避障时的航点任务（world 系，与 path/PCD 对齐后填写）
+frame_id: world
+arrive_horiz: 1.2
+arrive_z: 0.35
+# 判到达用哪路 odom：演示跟规划用 /viz/odom；评录制轨迹用 /mavros/odom_convert
+odom_topic: /viz/odom
+dwell_sec: 0.5
+
+waypoints:
+  - {x: 8.0, y: -5.0, z: 1.0, yaw: 0.0}
+  - {x: 12.7, y: -34.5, z: 1.0, yaw: 0.0}
