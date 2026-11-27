@@ -124,7 +124,8 @@ RViz 里「到了」= **规划演示轨迹** 画到目标附近，**不是** 录
 
 **做法：**
 
-- **评「规划有没有画到 goal」**（bag 调试推荐）：`ego_bag_plan_metrics.py` 设 `_arrival_mode:=plan_end`（比 optimal_list 末点）。
+- **与终端同款指标表**：`python ego_bag_plan_metrics.py _goal_x:=... _goal_y:=... _goal_z:=...`（字段与旧脚本一致；默认 `recorded` 到达判定）。
+- **评「规划有没有画到 goal」**（对照 RViz）：加 `_arrival_mode:=plan_end`。
 - **仍用旧脚本**：到达判定改用 **`plan_end`** 或订阅 **`/viz/odom`** 仅作演示说明，**不要**在实验报告里写成真机到达。
 - **评「真机/录制是否到达」**：只有 odom 真跟着飞（或 Path 本身终点就是 goal）时，才用 **recorded odom** 判定。
 
