@@ -42,6 +42,18 @@ def dist3(a, b):
     )
 
 
+def _finite(x):
+    """Python2 无 math.isfinite."""
+    try:
+        if x != x:
+            return False
+        if abs(x) == float("inf"):
+            return False
+        return True
+    except (TypeError, ValueError):
+        return False
+
+
 class EgoPlanMetrics(object):
     def __init__(self):
         rospy.init_node("ego_plan_metrics")
@@ -207,7 +219,7 @@ class EgoPlanMetrics(object):
         else:
             arrival = "UNKNOWN (no goal)"
 
-        if math.isfinite(self.min_clearance):
+        if _finite(self.min_clearance):
             min_clr = self.min_clearance
         else:
             min_clr = float("nan")
@@ -224,7 +236,7 @@ class EgoPlanMetrics(object):
             "Actual path length (odom) m 实际路径长度: %.2f"
             % self.actual_path_len,
             "Min obstacle distance m 最小障碍距离: %s"
-            % ("%.3f" % min_clr if math.isfinite(min_clr) else "N/A"),
+            % ("%.3f" % min_clr if _finite(min_clr) else "N/A"),
             "Arrival 到达结果: %s" % arrival,
             "Goal (x,y,z) 目标点: (%.2f, %.2f, %.2f)"
             % (self.goal[0], self.goal[1], self.goal[2]),
