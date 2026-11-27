@@ -1,172 +1,234 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-Rosbag + EGO（flight_type=1，无 waypoint_generator）：
+航点任务（与 Gazebo waypoint_sequential.py 同逻辑，用于 rosbag + EGO flight_type=1）。
 
-从 launch 写入的 /ego_planner_node/fsm/waypoint* 读航点，依次发 /move_base_simple/goal。
-launch：run_ego_bag_scripted.launch（只改 point_num / point*_*）。
+作用：按 launch 里 fsm/waypoint* 依次发目标，替代 RViz 2D Nav Goal。
 
-可选 ~config:=xxx.yaml 覆盖 launch 航点。
-
-指标：先起 ego_plan_metrics.py，再跑本脚本；终点为 /waypoint_mission/final_goal。
+依赖：
+  - launch 里 fsm/flight_type=1，point_num / waypoint0..N 已配置
+  - 可不起 waypoint_generator（本节点直发 /waypoint_generator/waypoints）
+  - path_to_odom_bridge；演示跟规划时 poscmd_to_viz_odom + _odom_topic:=/viz/odom
 
 用法：
+  source devel/setup.bash
   python waypoint_mission_bag.py
-  python waypoint_mission_bag.py _config:=config/waypoints_sbs01_bag.yaml
+  python waypoint_mission_bag.py _ego_input:=both _reach_radius:=1.5 _frame_id:=world
 """
 from __future__ import print_function
 
 import math
-import os
 
 import rospy
-import yaml
-from geometry_msgs.msg import PoseStamped, Quaternion
-from nav_msgs.msg import Odometry
+from geometry_msgs.msg import PoseStamped
+from nav_msgs.msg import Odometry, Path
+
+DEFAULT_WAYPOINTS = [
+    (12.7, -34.5, 1.0),
+]
 
 
-def _yaw_quat(yaw):
-    q = Quaternion()
-    q.z = math.sin(yaw * 0.5)
-    q.w = math.cos(yaw * 0.5)
-    return q
+def load_waypoints_from_params():
+    n = rospy.get_param("~waypoint_num", 0)
+    if n <= 0:
+        n = rospy.get_param("/ego_planner_node/fsm/waypoint_num", 0)
+    if n <= 0:
+        return list(DEFAULT_WAYPOINTS)
 
-
-def _load_from_fsm(fsm_ns):
-    n = int(rospy.get_param(fsm_ns + "/waypoint_num", 0))
     wps = []
     for i in range(n):
-        x = float(rospy.get_param(fsm_ns + "/waypoint%d_x" % i))
-        y = float(rospy.get_param(fsm_ns + "/waypoint%d_y" % i))
-        z = float(rospy.get_param(fsm_ns + "/waypoint%d_z" % i))
-        wps.append({"x": x, "y": y, "z": z, "yaw": 0.0})
+        x = rospy.get_param("~wp%d_x" % i, None)
+        if x is None:
+            x = rospy.get_param(
+                "/ego_planner_node/fsm/waypoint%d_x" % i, 0.0
+            )
+            y = rospy.get_param(
+                "/ego_planner_node/fsm/waypoint%d_y" % i, 0.0
+            )
+            z = rospy.get_param(
+                "/ego_planner_node/fsm/waypoint%d_z" % i, 1.0
+            )
+        else:
+            y = rospy.get_param("~wp%d_y" % i, 0.0)
+            z = rospy.get_param("~wp%d_z" % i, 1.0)
+        wps.append((float(x), float(y), float(z)))
     return wps
 
 
-class WaypointMissionBag(object):
+class WaypointSequential(object):
     def __init__(self):
-        rospy.init_node("waypoint_mission_bag")
-        self.fsm_ns = rospy.get_param("~fsm_param_ns", "/ego_planner_node/fsm")
+        rospy.init_node("waypoint_sequential")
+
         self.frame_id = rospy.get_param("~frame_id", "world")
-        self.arrive_h = float(rospy.get_param("~arrive_horiz", 1.2))
-        self.arrive_z = float(rospy.get_param("~arrive_z", 0.35))
-        self.dwell = float(rospy.get_param("~dwell_sec", 0.5))
-        self.odom_topic = rospy.get_param("~odom_topic", "/viz/odom")
+        self.reach_radius = rospy.get_param("~reach_radius", 1.2)
+        self.reach_z_tol = rospy.get_param("~reach_z_tol", 0.35)
+        self.start_delay = rospy.get_param("~start_delay", 2.0)
+        self.odom_wait_timeout = rospy.get_param("~odom_wait_timeout", 60.0)
+        self.publish_without_odom = rospy.get_param("~publish_without_odom", False)
+        self.goal_republish = int(rospy.get_param("~goal_republish", 3))
+        self.ego_input = rospy.get_param("~ego_input", "both").strip().lower()
+
+        self.odom_topic = rospy.get_param(
+            "~odom_topic", "/mavros/odom_convert"
+        )
+        self.odom_fallback_topic = rospy.get_param(
+            "~odom_fallback_topic", "/viz/odom"
+        )
         self.goal_topic = rospy.get_param(
             "~goal_topic", "/move_base_simple/goal"
         )
-
-        cfg_path = rospy.get_param("~config", "")
-        if cfg_path and os.path.isfile(cfg_path):
-            with open(cfg_path, "r") as fh:
-                cfg = yaml.safe_load(fh)
-            self.frame_id = cfg.get("frame_id", self.frame_id)
-            self.arrive_h = float(cfg.get("arrive_horiz", self.arrive_h))
-            self.arrive_z = float(cfg.get("arrive_z", self.arrive_z))
-            self.dwell = float(cfg.get("dwell_sec", self.dwell))
-            self.odom_topic = rospy.get_param(
-                "~odom_topic", cfg.get("odom_topic", self.odom_topic)
-            )
-            self.waypoints = cfg.get("waypoints", [])
-            rospy.loginfo("waypoints from yaml: %s", cfg_path)
-        else:
-            rospy.sleep(1.0)
-            self.waypoints = _load_from_fsm(self.fsm_ns)
-            rospy.loginfo(
-                "waypoints from %s waypoint_num=%d",
-                self.fsm_ns,
-                len(self.waypoints),
-            )
-
-        if not self.waypoints:
-            raise rospy.ROSException("no waypoints (launch fsm or ~config)")
-
-        self._odom = None
-        self._goal_pub = rospy.Publisher(
-            self.goal_topic, PoseStamped, queue_size=1, latch=True
+        self.waypoints_topic = rospy.get_param(
+            "~waypoints_topic", "/waypoint_generator/waypoints"
         )
+
+        self.waypoints = load_waypoints_from_params()
+        self.index = 0
+        self.odom = None
+        self.sent_index = -1
+        self.mission_done = False
+
+        use_goal = self.ego_input in ("goal", "both")
+        use_wps = self.ego_input in ("waypoints", "both")
+
+        self.goal_pub = None
+        self.waypoints_pub = None
+        if use_goal:
+            self.goal_pub = rospy.Publisher(
+                self.goal_topic, PoseStamped, queue_size=1, latch=True
+            )
+        if use_wps:
+            self.waypoints_pub = rospy.Publisher(
+                self.waypoints_topic, Path, queue_size=1, latch=True
+            )
+
         self._final_pub = rospy.Publisher(
             "/waypoint_mission/final_goal",
             PoseStamped,
             queue_size=1,
             latch=True,
         )
-        rospy.Subscriber(self.odom_topic, Odometry, self._odom_cb, queue_size=30)
 
-    def _odom_cb(self, msg):
-        p = msg.pose.pose.position
-        self._odom = (p.x, p.y, p.z)
+        for t in (self.odom_topic, self.odom_fallback_topic):
+            if t:
+                rospy.Subscriber(
+                    t, Odometry, self._make_odom_cb(t), queue_size=1
+                )
+
+        rospy.loginfo(
+            "waypoints=%d ego_input=%s odom=%s fallback=%s",
+            len(self.waypoints),
+            self.ego_input,
+            self.odom_topic,
+            self.odom_fallback_topic,
+        )
+
+    def _make_odom_cb(self, topic):
+        def _cb(msg):
+            if self.odom is None:
+                p = msg.pose.pose.position
+                rospy.loginfo(
+                    "odom from %s: start (%.2f, %.2f, %.2f)",
+                    topic,
+                    p.x,
+                    p.y,
+                    p.z,
+                )
+            self.odom = msg
+
+        return _cb
+
+    def _dist_to(self, wp):
+        p = self.odom.pose.pose.position
+        horiz = math.hypot(p.x - wp[0], p.y - wp[1])
+        dz = abs(p.z - wp[2])
+        return horiz, dz
 
     def _pose_goal(self, wp):
-        ps = PoseStamped()
-        ps.header.frame_id = self.frame_id
-        ps.header.stamp = rospy.Time.now()
-        ps.pose.position.x = wp["x"]
-        ps.pose.position.y = wp["y"]
-        ps.pose.position.z = wp.get("z", 1.0)
-        ps.pose.orientation = _yaw_quat(wp.get("yaw", 0.0))
-        return ps
+        pose = PoseStamped()
+        pose.header.stamp = rospy.Time.now()
+        pose.header.frame_id = self.frame_id
+        pose.pose.position.x = wp[0]
+        pose.pose.position.y = wp[1]
+        pose.pose.position.z = wp[2]
+        pose.pose.orientation.w = 1.0
+        return pose
 
-    def _wait_odom(self, timeout):
+    def _publish_goal(self, wp):
+        pose = self._pose_goal(wp)
+        path = Path()
+        path.header = pose.header
+        path.poses.append(pose)
+
+        for _ in range(max(1, self.goal_republish)):
+            if self.goal_pub is not None:
+                self.goal_pub.publish(pose)
+            if self.waypoints_pub is not None:
+                self.waypoints_pub.publish(path)
+            rospy.sleep(0.15)
+
+        self.sent_index = self.index
+        rospy.loginfo(
+            "Sent goal %d/%d -> (%.2f, %.2f, %.2f)",
+            self.index + 1,
+            len(self.waypoints),
+            wp[0],
+            wp[1],
+            wp[2],
+        )
+
+    def _wait_for_odom(self):
         t0 = rospy.Time.now()
-        rate = rospy.Rate(20)
-        while not rospy.is_shutdown() and self._odom is None:
-            if (rospy.Time.now() - t0).to_sec() > timeout:
-                return False
-            rate.sleep()
-        return True
-
-    def _at_goal(self, wp):
-        if self._odom is None:
-            return False
-        ox, oy, oz = self._odom
-        h = math.hypot(ox - wp["x"], oy - wp["y"])
-        dz = abs(oz - wp.get("z", 1.0))
-        return h <= self.arrive_h and dz <= self.arrive_z
-
-    def _wait_reach(self, wp, timeout):
-        rate = rospy.Rate(10)
-        t0 = rospy.Time.now()
-        while not rospy.is_shutdown():
-            if self._at_goal(wp):
-                rospy.sleep(self.dwell)
-                return True
-            if (rospy.Time.now() - t0).to_sec() > timeout:
-                return False
-            rate.sleep()
-        return False
+        while self.odom is None and not rospy.is_shutdown():
+            if (rospy.Time.now() - t0).to_sec() > self.odom_wait_timeout:
+                if self.publish_without_odom:
+                    rospy.logwarn("odom timeout; publish without odom")
+                    return
+                raise RuntimeError(
+                    "odom timeout - start path_to_odom_bridge or "
+                    "poscmd_to_viz_odom, or set _publish_without_odom:=true"
+                )
+            rospy.sleep(0.1)
 
     def run(self):
-        timeout = float(rospy.get_param("~wp_timeout_sec", 180.0))
-        if not self._wait_odom(min(timeout, 30.0)):
-            rospy.logerr("no odom on %s", self.odom_topic)
+        if not self.waypoints:
+            rospy.logerr("no waypoints")
             return
 
         final = self.waypoints[-1]
         self._final_pub.publish(self._pose_goal(final))
         rospy.loginfo(
-            "final goal (%.2f, %.2f, %.2f)", final["x"], final["y"], final.get("z", 1.0)
+            "mission final goal (%.2f, %.2f, %.2f)", final[0], final[1], final[2]
         )
 
-        for i, wp in enumerate(self.waypoints):
-            rospy.loginfo(
-                "waypoint %d/%d -> (%.2f, %.2f, %.2f)",
-                i + 1,
-                len(self.waypoints),
-                wp["x"],
-                wp["y"],
-                wp.get("z", 1.0),
-            )
-            self._goal_pub.publish(self._pose_goal(wp))
-            ok = self._wait_reach(wp, timeout)
-            if not ok:
-                rospy.logwarn("skip timeout at wp %d", i + 1)
+        self._wait_for_odom()
+        rospy.sleep(self.start_delay)
+        self._publish_goal(self.waypoints[0])
 
-        rospy.loginfo("mission done")
+        rate = rospy.Rate(10)
+        while not rospy.is_shutdown() and not self.mission_done:
+            if self.odom is None or self.sent_index < 0:
+                rate.sleep()
+                continue
+
+            wp = self.waypoints[self.index]
+            horiz, dz = self._dist_to(wp)
+            if horiz <= self.reach_radius and dz <= self.reach_z_tol:
+                if self.index >= len(self.waypoints) - 1:
+                    rospy.loginfo(
+                        "Mission complete (%d waypoints).", len(self.waypoints)
+                    )
+                    self.mission_done = True
+                    break
+                self.index += 1
+                rospy.sleep(1.0)
+                self._publish_goal(self.waypoints[self.index])
+
+            rate.sleep()
 
 
 if __name__ == "__main__":
     try:
-        WaypointMissionBag().run()
+        WaypointSequential().run()
+        rospy.spin()
     except rospy.ROSInterruptException:
         pass

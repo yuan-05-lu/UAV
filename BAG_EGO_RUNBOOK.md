@@ -129,7 +129,7 @@ RViz 里「到了」= **规划演示轨迹** 画到目标附近，**不是** 录
 **推荐：launch 写航点，`flight_type=1`，不起 waypoint_generator**
 
 1. `launch_amended/run_ego_bag_scripted.launch`：改 `point_num`、`point0_*`…`pointN_*`
-2. `waypoint_mission_bag.py`：默认读 `/ego_planner_node/fsm/waypoint*`，逐个发 `/move_base_simple/goal`
+2. `waypoint_mission_bag.py`（同 Gazebo `waypoint_sequential.py`）：读 fsm 航点，`_ego_input:=both` 发 `/move_base_simple/goal` + `/waypoint_generator/waypoints`
 3. `ego_plan_metrics.py`：采指标；终点以 `/waypoint_mission/final_goal` 为准
 
 ```bash

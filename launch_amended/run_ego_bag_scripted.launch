@@ -74,7 +74,7 @@
     <arg name="point5_z" value="$(arg point5_z)"/>
   </include>
 
-  <!-- 无 waypoint_generator：goal 由 waypoint_mission_bag.py -> /move_base_simple/goal -->
+  <!-- 无 waypoint_generator 节点：waypoint_mission_bag.py 代发 goal + /waypoint_generator/waypoints -->
 
   <node pkg="ego_planner" name="traj_server" type="traj_server" output="screen">
     <remap from="/position_cmd" to="/planning/pos_cmd"/>
