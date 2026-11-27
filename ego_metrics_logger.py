@@ -315,11 +315,10 @@ class EgoMetricsLogger(object):
         else:
             arrival = "UNKNOWN (no goal)"
 
-        min_clr = (
-            self.min_clearance
-            if math.isfinite(self.min_clearance)
-            else float("nan")
-        )
+        if math.isfinite(self.min_clearance):
+            min_clr = self.min_clearance
+        else:
+            min_clr = float("nan")
 
         lines = [
             "",
