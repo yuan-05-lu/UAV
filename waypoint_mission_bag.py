@@ -23,9 +23,22 @@ import rospy
 from geometry_msgs.msg import PoseStamped
 from nav_msgs.msg import Odometry, Path
 
-DEFAULT_WAYPOINTS = [
-    (12.7, -34.5, 1.0),
-]
+def _dedupe_consecutive(wps, eps_xy=0.3, eps_z=0.15):
+    if not wps:
+        return wps
+    out = [wps[0]]
+    for w in wps[1:]:
+        la = out[-1]
+        if (
+            math.hypot(w[0] - la[0], w[1] - la[1]) < eps_xy
+            and abs(w[2] - la[2]) < eps_z
+        ):
+            rospy.logwarn(
+                "drop duplicate waypoint (%.2f, %.2f, %.2f)", w[0], w[1], w[2]
+            )
+            continue
+        out.append(w)
+    return out
 
 
 def load_waypoints_from_params():
@@ -33,7 +46,7 @@ def load_waypoints_from_params():
     if n <= 0:
         n = rospy.get_param("/ego_planner_node/fsm/waypoint_num", 0)
     if n <= 0:
-        return list(DEFAULT_WAYPOINTS)
+        return []
 
     wps = []
     for i in range(n):
@@ -52,7 +65,7 @@ def load_waypoints_from_params():
             y = rospy.get_param("~wp%d_y" % i, 0.0)
             z = rospy.get_param("~wp%d_z" % i, 1.0)
         wps.append((float(x), float(y), float(z)))
-    return wps
+    return _dedupe_consecutive(wps)
 
 
 class WaypointSequential(object):
@@ -66,6 +79,8 @@ class WaypointSequential(object):
         self.odom_wait_timeout = rospy.get_param("~odom_wait_timeout", 60.0)
         self.publish_without_odom = rospy.get_param("~publish_without_odom", False)
         self.goal_republish = int(rospy.get_param("~goal_republish", 3))
+        self.min_goal_sep_xy = float(rospy.get_param("~min_goal_sep_xy", 2.0))
+        self.wp_cooldown_sec = float(rospy.get_param("~wp_cooldown_sec", 3.0))
         self.ego_input = rospy.get_param("~ego_input", "both").strip().lower()
 
         self.odom_topic = rospy.get_param(
@@ -82,6 +97,12 @@ class WaypointSequential(object):
         )
 
         self.waypoints = load_waypoints_from_params()
+        if not self.waypoints:
+            rospy.logerr(
+                "no waypoints: set launch point_num / waypoint* or ~wp0_x ..."
+            )
+        for i, w in enumerate(self.waypoints):
+            rospy.loginfo("wp[%d] (%.2f, %.2f, %.2f)", i, w[0], w[1], w[2])
         self.index = 0
         self.odom = None
         self.sent_index = -1
@@ -153,7 +174,20 @@ class WaypointSequential(object):
         pose.pose.orientation.w = 1.0
         return pose
 
-    def _publish_goal(self, wp):
+    def _publish_goal(self, wp, require_min_sep=False):
+        if self.odom is not None and require_min_sep:
+            horiz, _ = self._dist_to(wp)
+            if horiz < self.min_goal_sep_xy:
+                rospy.logwarn(
+                    "skip publish: goal only %.2fm from odom "
+                    "(need >= %.2fm) (%.2f, %.2f, %.2f)",
+                    horiz,
+                    self.min_goal_sep_xy,
+                    wp[0],
+                    wp[1],
+                    wp[2],
+                )
+                return False
         pose = self._pose_goal(wp)
         path = Path()
         path.header = pose.header
@@ -175,6 +209,21 @@ class WaypointSequential(object):
             wp[1],
             wp[2],
         )
+        return True
+
+    def _advance_and_publish_next(self):
+        """切下一航点；过近/重复则跳过，避免 EGO last_progress_time_ ERROR。"""
+        while self.index < len(self.waypoints) - 1:
+            self.index += 1
+            rospy.sleep(self.wp_cooldown_sec)
+            wp = self.waypoints[self.index]
+            if self._publish_goal(wp, require_min_sep=True):
+                return
+            if self.index >= len(self.waypoints) - 1:
+                rospy.loginfo("skipped to final index; mission complete")
+                self.mission_done = True
+                return
+        self.mission_done = True
 
     def _wait_for_odom(self):
         t0 = rospy.Time.now()
@@ -219,9 +268,15 @@ class WaypointSequential(object):
                     )
                     self.mission_done = True
                     break
-                self.index += 1
-                rospy.sleep(1.0)
-                self._publish_goal(self.waypoints[self.index])
+                rospy.loginfo(
+                    "reached wp %d/%d, cooldown %.1fs -> next",
+                    self.index + 1,
+                    len(self.waypoints),
+                    self.wp_cooldown_sec,
+                )
+                self._advance_and_publish_next()
+                if self.mission_done:
+                    break
 
             rate.sleep()
 

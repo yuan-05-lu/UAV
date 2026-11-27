@@ -138,6 +138,8 @@ python ego_plan_metrics.py _csv_path:=/tmp/run.csv _odom_topic:=/viz/odom
 python waypoint_mission_bag.py            # 无需 yaml
 ```
 
+多航点时相邻点 **水平间距建议 ≥ 2 m**（`_min_goal_sep_xy`），且 launch 里 **不要重复坐标**，否则第二航点会 `last_progress_time_ ERROR`（start≈goal）。
+
 若 EGO 收不到 goal，在 `ego_planner_node` 上增加  
 `<remap from="/goal" to="/move_base_simple/goal"/>`（视你 fork 订阅名而定）。
 - **评「规划有没有画到 goal」**（对照 RViz）：加 `_arrival_mode:=plan_end`。
