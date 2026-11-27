@@ -144,6 +144,12 @@ class WaypointSequential(object):
             queue_size=1,
             latch=True,
         )
+        self._hold_pub = rospy.Publisher(
+            "/waypoint_mission/hold_odom",
+            PoseStamped,
+            queue_size=2,
+        )
+        self.hold_ego_odom = rospy.get_param("~hold_ego_odom", True)
 
         for t in (self.odom_topic, self.odom_fallback_topic):
             if t:
@@ -216,6 +222,16 @@ class WaypointSequential(object):
         pose.pose.position.z = wp[2]
         pose.pose.orientation.w = 1.0
         return pose
+
+    def _freeze_ego_at_wp(self, wp):
+        """冻结 path_to_odom_bridge，EGO 从该点续跑（不跟 bag 回到原点）。"""
+        if not self.hold_ego_odom:
+            return
+        pose = self._pose_goal(wp)
+        self._hold_pub.publish(pose)
+        rospy.loginfo(
+            "hold EGO odom at wp (%.2f, %.2f, %.2f)", wp[0], wp[1], wp[2]
+        )
 
     def _publish_goal(self, wp, require_min_sep=False):
         if self.odom is not None and require_min_sep:
@@ -328,11 +344,13 @@ class WaypointSequential(object):
             horiz, dz = self._dist_to(wp)
             if horiz <= self.reach_radius and dz <= self.reach_z_tol:
                 if self.index >= len(self.waypoints) - 1:
+                    self._freeze_ego_at_wp(wp)
                     rospy.loginfo(
                         "Mission complete (%d waypoints).", len(self.waypoints)
                     )
                     self.mission_done = True
                     break
+                self._freeze_ego_at_wp(wp)
                 rospy.loginfo(
                     "reached wp %d/%d, cooldown %.1fs -> next",
                     self.index + 1,

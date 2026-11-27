@@ -9,6 +9,9 @@
 用法：
   python path_to_odom_bridge.py _path_topic:=/node_pos_sc _odom_topic:=/mavros/odom_convert
 
+多航点任务：waypoint_mission_bag 到达后会发 /waypoint_mission/hold_odom，
+本节点冻结位姿，EGO 从当前航点续跑到下一航点（不再跟 bag 回到原点）。
+
 若点云 frame_id 为雷达系，另启 static TF（示例）：
   rosrun tf2_ros static_transform_publisher 0 0 0 0 0 0 base_link sensor1/os_sensor 100
 """
@@ -60,6 +63,7 @@ class PathToOdomBridge(object):
         self._warned_bad_quat = False
         self._last_tf = None
         self._tf_rate = rospy.get_param("~tf_republish_hz", 30.0)
+        self._hold_pose = None
 
         self._odom_pub = rospy.Publisher(self.odom_topic, Odometry, queue_size=5)
         self._tf_br = tf2_ros.TransformBroadcaster()
@@ -67,6 +71,12 @@ class PathToOdomBridge(object):
             self._send_static_world_map()
 
         rospy.Subscriber(self.path_topic, Path, self._path_cb, queue_size=5)
+        rospy.Subscriber(
+            "/waypoint_mission/hold_odom",
+            PoseStamped,
+            self._hold_cb,
+            queue_size=5,
+        )
         if self.publish_tf and self._tf_rate > 0:
             rospy.Timer(
                 rospy.Duration(1.0 / self._tf_rate), self._tf_timer, oneshot=False
@@ -92,7 +102,24 @@ class PathToOdomBridge(object):
         static_br.sendTransform(msgs)
         rospy.loginfo("Static TF latched: %s -> map -> %s", self.world_frame, self.odom_frame)
 
+    def _hold_cb(self, msg):
+        self._hold_pose = msg.pose
+        ps = PoseStamped()
+        ps.header.stamp = rospy.Time.now()
+        ps.header.frame_id = msg.header.frame_id or self.odom_frame
+        ps.pose = msg.pose
+        self._latest = ps
+        self._publish_odom(ps)
+        rospy.loginfo(
+            "hold odom at (%.2f, %.2f, %.2f) — ignore Path until release",
+            msg.pose.position.x,
+            msg.pose.position.y,
+            msg.pose.position.z,
+        )
+
     def _path_cb(self, msg):
+        if self._hold_pose is not None:
+            return
         if not msg.poses:
             return
         if msg.header.frame_id:
@@ -159,6 +186,9 @@ class PathToOdomBridge(object):
 
     def _tf_timer(self, _evt):
         if not self.publish_tf or self._last_tf is None:
+            return
+        if self._hold_pose is not None and self._latest is not None:
+            self._publish_odom(self._latest)
             return
         try:
             pos, ori = self._last_tf

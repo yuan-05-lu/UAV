@@ -138,7 +138,9 @@ python ego_plan_metrics.py _csv_path:=/tmp/run.csv _odom_topic:=/viz/odom
 python waypoint_mission_bag.py            # 无需 yaml
 ```
 
-多航点时相邻点 **水平间距建议 ≥ 2 m**（`_min_goal_sep_xy`），且 launch 里 **不要重复坐标**。**第二航点坐标对但 EGO 不规划 / 时间戳报错**：几乎总是 `use_sim_time=true` 时 **bag 暂停** 或 **/clock 不走**；第一点到位后 **保持 bag 播放**，再发第二点。脚本默认 `_use_odom_stamp:=true`，goal 时间与 odom 对齐。
+多航点时相邻点 **水平间距建议 ≥ 2 m**（`_min_goal_sep_xy`），且 launch 里 **不要重复坐标**。**第二段从原点重跑**：到达第一航点后 `path_to_odom_bridge` 仍跟 bag Path，EGO 起点跳回录像开头。`git pull` 后脚本会发 `/waypoint_mission/hold_odom` 冻结机体位姿，第二段从第一航点续跑。需 `_hold_ego_odom:=true`（默认）。
+
+**第二航点坐标对但 EGO 不规划 / 时间戳报错**：几乎总是 `use_sim_time=true` 时 **bag 暂停** 或 **/clock 不走**；第一点到位后 **保持 bag 播放**，再发第二点。脚本默认 `_use_odom_stamp:=true`，goal 时间与 odom 对齐。
 
 **备选**：两点一次规划 → launch `flight_type:=2`、`point_num:=2`，只发一次任务、不用顺序 Nav Goal。
 
