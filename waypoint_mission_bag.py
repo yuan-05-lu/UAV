@@ -22,6 +22,7 @@ import math
 import rospy
 from geometry_msgs.msg import PoseStamped
 from nav_msgs.msg import Odometry, Path
+from std_msgs.msg import Empty
 
 def _dedupe_consecutive(wps, eps_xy=0.3, eps_z=0.15):
     if not wps:
@@ -95,6 +96,10 @@ class WaypointSequential(object):
         self.waypoints_topic = rospy.get_param(
             "~waypoints_topic", "/waypoint_generator/waypoints"
         )
+        self.trigger_topic = rospy.get_param(
+            "~trigger_topic", "/traj_start_trigger"
+        )
+        self.goal_latch = rospy.get_param("~goal_latch", False)
 
         self.waypoints = load_waypoints_from_params()
         if not self.waypoints:
@@ -115,12 +120,21 @@ class WaypointSequential(object):
         self.waypoints_pub = None
         if use_goal:
             self.goal_pub = rospy.Publisher(
-                self.goal_topic, PoseStamped, queue_size=1, latch=True
+                self.goal_topic,
+                PoseStamped,
+                queue_size=5,
+                latch=self.goal_latch,
             )
         if use_wps:
             self.waypoints_pub = rospy.Publisher(
-                self.waypoints_topic, Path, queue_size=1, latch=True
+                self.waypoints_topic,
+                Path,
+                queue_size=5,
+                latch=self.goal_latch,
             )
+        self.trigger_pub = rospy.Publisher(
+            self.trigger_topic, Empty, queue_size=2
+        )
 
         self._final_pub = rospy.Publisher(
             "/waypoint_mission/final_goal",
@@ -194,11 +208,17 @@ class WaypointSequential(object):
         path.poses.append(pose)
 
         for _ in range(max(1, self.goal_republish)):
+            pose.header.stamp = rospy.Time.now()
+            path.header.stamp = pose.header.stamp
             if self.goal_pub is not None:
                 self.goal_pub.publish(pose)
             if self.waypoints_pub is not None:
                 self.waypoints_pub.publish(path)
             rospy.sleep(0.15)
+
+        self.trigger_pub.publish(Empty())
+        rospy.sleep(0.1)
+        self.trigger_pub.publish(Empty())
 
         self.sent_index = self.index
         rospy.loginfo(

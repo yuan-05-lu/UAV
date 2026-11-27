@@ -14,11 +14,11 @@
   <!-- ========== 航点（与 ego_planner fsm 一致，脚本从此读） ========== -->
   <arg name="flight_type" value="1"/>
   <arg name="point_num" value="2"/>
-  <arg name="point0_x" value="8.0"/>
-  <arg name="point0_y" value="-5.0"/>
+  <arg name="point0_x" value="12.7"/>
+  <arg name="point0_y" value="-34.5"/>
   <arg name="point0_z" value="1.0"/>
-  <arg name="point1_x" value="12.7"/>
-  <arg name="point1_y" value="-34.5"/>
+  <arg name="point1_x" value="21.4"/>
+  <arg name="point1_y" value="-29.7"/>
   <arg name="point1_z" value="1.0"/>
   <arg name="point2_x" value="0.0"/>
   <arg name="point2_y" value="0.0"/>
