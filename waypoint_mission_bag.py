@@ -100,6 +100,8 @@ class WaypointSequential(object):
             "~trigger_topic", "/traj_start_trigger"
         )
         self.goal_latch = rospy.get_param("~goal_latch", False)
+        self.use_odom_stamp = rospy.get_param("~use_odom_stamp", True)
+        self.use_sim_time = rospy.get_param("/use_sim_time", False)
 
         self.waypoints = load_waypoints_from_params()
         if not self.waypoints:
@@ -150,12 +152,19 @@ class WaypointSequential(object):
                 )
 
         rospy.loginfo(
-            "waypoints=%d ego_input=%s odom=%s fallback=%s",
+            "waypoints=%d ego_input=%s odom=%s fallback=%s "
+            "use_sim_time=%s use_odom_stamp=%s",
             len(self.waypoints),
             self.ego_input,
             self.odom_topic,
             self.odom_fallback_topic,
+            self.use_sim_time,
+            self.use_odom_stamp,
         )
+        if self.use_sim_time:
+            rospy.logwarn(
+                "use_sim_time=true: bag 须持续播 /clock；暂停 bag 后发第二航点易时间错乱/不规划"
+            )
 
     def _make_odom_cb(self, topic):
         def _cb(msg):
@@ -178,9 +187,29 @@ class WaypointSequential(object):
         dz = abs(p.z - wp[2])
         return horiz, dz
 
+    def _goal_stamp(self):
+        if self.use_odom_stamp and self.odom is not None:
+            st = self.odom.header.stamp
+            if st.to_sec() > 0:
+                return st
+        return rospy.Time.now()
+
+    def _wait_sim_advance(self, min_dt=0.3, timeout=10.0):
+        """sim 时间往前走一段（bag 在播时），减轻时间戳错位。"""
+        if not self.use_sim_time:
+            return True
+        t0 = rospy.Time.now()
+        deadline = rospy.Time.now() + rospy.Duration(timeout)
+        while rospy.Time.now() < deadline and not rospy.is_shutdown():
+            if (rospy.Time.now() - t0).to_sec() >= min_dt:
+                return True
+            rospy.sleep(0.05)
+        rospy.logwarn("sim time did not advance %.2fs - is /clock publishing?", min_dt)
+        return False
+
     def _pose_goal(self, wp):
         pose = PoseStamped()
-        pose.header.stamp = rospy.Time.now()
+        pose.header.stamp = self._goal_stamp()
         pose.header.frame_id = self.frame_id
         pose.pose.position.x = wp[0]
         pose.pose.position.y = wp[1]
@@ -207,27 +236,34 @@ class WaypointSequential(object):
         path.header = pose.header
         path.poses.append(pose)
 
+        self._wait_sim_advance(0.1, 5.0)
+        self.trigger_pub.publish(Empty())
+        rospy.sleep(0.08)
+
         for _ in range(max(1, self.goal_republish)):
-            pose.header.stamp = rospy.Time.now()
-            path.header.stamp = pose.header.stamp
+            stamp = self._goal_stamp()
+            pose.header.stamp = stamp
+            path.header.stamp = stamp
             if self.goal_pub is not None:
                 self.goal_pub.publish(pose)
             if self.waypoints_pub is not None:
                 self.waypoints_pub.publish(path)
-            rospy.sleep(0.15)
+            if self.use_sim_time:
+                self._wait_sim_advance(0.15, 3.0)
+            else:
+                rospy.sleep(0.15)
 
-        self.trigger_pub.publish(Empty())
-        rospy.sleep(0.1)
         self.trigger_pub.publish(Empty())
 
         self.sent_index = self.index
         rospy.loginfo(
-            "Sent goal %d/%d -> (%.2f, %.2f, %.2f)",
+            "Sent goal %d/%d -> (%.2f, %.2f, %.2f) stamp=%.3f",
             self.index + 1,
             len(self.waypoints),
             wp[0],
             wp[1],
             wp[2],
+            pose.header.stamp.to_sec(),
         )
         return True
 
@@ -235,7 +271,16 @@ class WaypointSequential(object):
         """切下一航点；过近/重复则跳过，避免 EGO last_progress_time_ ERROR。"""
         while self.index < len(self.waypoints) - 1:
             self.index += 1
-            rospy.sleep(self.wp_cooldown_sec)
+            rospy.loginfo(
+                "cooldown %.1fs before wp %d/%d",
+                self.wp_cooldown_sec,
+                self.index + 1,
+                len(self.waypoints),
+            )
+            t_end = rospy.Time.now() + rospy.Duration(self.wp_cooldown_sec)
+            while rospy.Time.now() < t_end and not rospy.is_shutdown():
+                rospy.sleep(0.05)
+            self._wait_sim_advance(0.5, 15.0)
             wp = self.waypoints[self.index]
             if self._publish_goal(wp, require_min_sep=True):
                 return

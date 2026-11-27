@@ -138,7 +138,11 @@ python ego_plan_metrics.py _csv_path:=/tmp/run.csv _odom_topic:=/viz/odom
 python waypoint_mission_bag.py            # 无需 yaml
 ```
 
-多航点时相邻点 **水平间距建议 ≥ 2 m**（`_min_goal_sep_xy`），且 launch 里 **不要重复坐标**。第二航点 EGO 仍显示第一点坐标时：确认 `waypoint_mission_bag.py` 已 `git pull`（发 goal 后会打 `/traj_start_trigger`，goal 默认不 latch）。
+多航点时相邻点 **水平间距建议 ≥ 2 m**（`_min_goal_sep_xy`），且 launch 里 **不要重复坐标**。**第二航点坐标对但 EGO 不规划 / 时间戳报错**：几乎总是 `use_sim_time=true` 时 **bag 暂停** 或 **/clock 不走**；第一点到位后 **保持 bag 播放**，再发第二点。脚本默认 `_use_odom_stamp:=true`，goal 时间与 odom 对齐。
+
+**备选**：两点一次规划 → launch `flight_type:=2`、`point_num:=2`，只发一次任务、不用顺序 Nav Goal。
+
+第二航点仍显示第一点坐标时：`git pull` 后用 `traj_start_trigger` + 非 latch goal。
 
 若 EGO 收不到 goal，在 `ego_planner_node` 上增加  
 `<remap from="/goal" to="/move_base_simple/goal"/>`（视你 fork 订阅名而定）。
