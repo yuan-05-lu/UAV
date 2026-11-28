@@ -1,0 +1,92 @@
+<launch>
+  <param name="use_sim_time" value="true"/>
+
+  <arg name="map_size_x" value="100.0"/>
+  <arg name="map_size_y" value="100.0"/>
+  <arg name="map_size_z" value="2.5"/>
+
+  <!--<arg name="use_pcd_map" value="true"/>
+  <arg name="pcd_map_path" value="/home/yuan2/sbs_01_global.pcd"/>
+  <arg name="use_odom_map" value="false"/>-->
+  
+
+  <arg name="odom_topic" value="/mavros/odom_convert"/>
+  <arg name="cloud_topic" value="/ego/points_world"/>
+  <arg name="odometry_topic" value="$(arg odom_topic)"/>
+
+  <include file="$(find ego_planner)/launch/advanced_param.xml">
+    <arg name="map_size_x_" value="$(arg map_size_x)"/>
+    <arg name="map_size_y_" value="$(arg map_size_y)"/>
+    <arg name="map_size_z_" value="$(arg map_size_z)"/>
+    <arg name="odometry_topic" value="$(arg odometry_topic)"/>
+
+    <arg name="camera_pose_topic" value="/pcl_render_node/camera_pose"/>
+    <arg name="depth_topic" value="/pcl_render_node/depth"/>
+    <arg name="cloud_topic" value="$(arg cloud_topic)"/>
+
+    <arg name="cx" value="321.04638671875"/>
+    <arg name="cy" value="243.44969177246094"/>
+    <arg name="fx" value="387.229248046875"/>
+    <arg name="fy" value="387.229248046875"/>
+
+    <arg name="max_vel" value="1.7"/>
+    <arg name="max_acc" value="1.5"/>
+    <arg name="planning_horizon" value="10"/>
+
+    <!-- 1: RViz 2D Nav Goal 或 waypoint_sequential -->
+    <arg name="flight_type" value="1"/>
+
+    <arg name="point_num" value="1"/>
+    <arg name="point0_x" value="25.7"/>
+    <arg name="point0_y" value="3.29"/>
+    <arg name="point0_z" value="1.0"/>
+    <!--<arg name="point1_x" value="21.4"/>
+    <arg name="point1_y" value="-29.7"/>
+    <arg name="point1_z" value="1.0"/>
+    <arg name="point2_x" value="0.0"/>
+    <arg name="point2_y" value="0.0"/>
+    <arg name="point2_z" value="1.0"/>
+    <arg name="point3_x" value="0.0"/>
+    <arg name="point3_y" value="0.0"/>
+    <arg name="point3_z" value="1.0"/>
+    <arg name="point4_x" value="0.0"/>
+    <arg name="point4_y" value="0.0"/>
+    <arg name="point4_z" value="1.0"/>
+    <arg name="point5_x" value="0.0"/>
+    <arg name="point5_y" value="0.0"/>
+    <arg name="point5_z" value="1.0"/>-->
+  </include>
+
+  <node pkg="ego_planner" name="traj_server" type="traj_server" output="screen">
+    <remap from="/position_cmd" to="/planning/pos_cmd"/>
+    <remap from="/odom_world" to="$(arg odom_topic)"/>
+    <param name="traj_server/time_forward" value="1.5" type="double"/>
+    <param name="traj_opt/yaw_tracking" value="false"/>
+    <!--<param name="use_pcd_map" value="$(arg use_pcd_map)"/>
+    <param name="pcd_map_path" value="$(arg pcd_map_path)"/>
+    <param  name="use_odom_map" value="$(arg use_odom_map)"/>-->
+  </node>
+  
+
+    <!--<node pkg="waypoint_generator" name="waypoint_generator" type="waypoint_generator" output="screen">
+    <remap from="~odom" to="$(arg odom_topic)"/>        
+    <remap from="~goal" to="/move_base_simple/goal"/>
+    <remap from="~traj_start_trigger" to="/traj_start_trigger" />
+    <param name="waypoint_type" value="manual-lonely-waypoint"/>    
+  </node>-->
+
+  <!-- 省内存可整段注释；要看飞机模型再打开 -->
+  
+  <node pkg="odom_visualization" name="odom_visualization" type="odom_visualization" output="screen">
+    <remap from="~odom" to="/viz/odom"/>
+    <!--<remap from="~odom" to="$(arg odom_topic)"/>-->
+    <param name="frame_id" value="world"/>
+    <!--<param name="mesh_resource" value="file:///home/yuan2/PX4-Autopilot/Tools/sitl_gazebo/models/iris_with_foggy/meshes/iris.stl"/>-->
+    <param name="color/a" value="1.0"/>    
+    <param name="color/r" value="0.3"/>        
+    <param name="color/g" value="0.7"/>        
+    <param name="color/b" value="1.0"/>          
+    <param name="robot_scale" value="2.0"/>
+  </node>
+  
+</launch>
